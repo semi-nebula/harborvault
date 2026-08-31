@@ -282,6 +282,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- CONTENT SECURITY POLICY: this page may ONLY run its own inline
+     code plus the three hash-locked Firebase files below, and may
+     only exchange data with Google's API servers. Anything else -
+     an injected script, a tracker, an attacker's server - is
+     blocked by the browser itself. -->
+<meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' 'unsafe-inline' https://www.gstatic.com;
+             style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+             font-src 'self' data: https://fonts.gstatic.com;
+             img-src 'self' data: blob:;
+             connect-src 'self' https://*.googleapis.com wss://*.googleapis.com
+                          https://*.firebaseio.com wss://*.firebaseio.com;
+             object-src 'none';
+             base-uri 'none';
+             form-action 'self'"
+>
 <meta name="description" content="HarborVault - a private, local-first password manager prototype with profiles, collections, privacy masking and a security dashboard.">
 <meta name="color-scheme" content="dark light">
 <title>HarborVault - Private Password Manager</title>
@@ -872,55 +891,6 @@ button {
     flex-shrink: 0;     /* always fully visible below the scroll area */
 }
 
-.vault-status {
-    padding: 12px;
-
-    background: var(--surface-soft);
-
-    border: 1px solid var(--border);
-
-    border-radius: 12px;
-
-    margin-bottom: 10px;
-}
-
-.status-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    font-size: 11px;
-}
-
-.status-line span {
-    color: var(--text-secondary);
-}
-
-.status-line strong {
-    font-size: 10px;
-}
-
-.status-bar {
-    height: 5px;
-
-    margin-top: 9px;
-
-    background: var(--surface-hover);
-
-    border-radius: 99px;
-
-    overflow: hidden;
-}
-
-.status-fill {
-    height: 100%;
-    width: 18%;                 /* decorative placeholder value */
-
-    background: var(--accent-gradient);
-
-    border-radius: inherit;
-}
-
 .lock-sidebar {
     width: 100%;
 
@@ -1427,7 +1397,9 @@ button {
 
     border-radius: var(--radius-lg);
 
-    overflow: hidden;
+    /* never CLIP a row that does not fit - scroll it. (The grid
+       ranges below make rows fit anyway; this is the safety net.) */
+    overflow-x: auto;
 }
 
 .password-row {
@@ -3275,6 +3247,71 @@ button {
     font-size: 12.5px;
 }
 
+/* two-line sidebar rows (Account & appearance section) */
+.tool-btn .tool-sub {
+    display: block;
+    margin-top: 2px;
+
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+/* =========================================================
+   TOUCH POLISH
+   Mobile browsers flash a blue "tap highlight" rectangle on every
+   tappable element and let long-presses select text inside controls.
+   Both feel broken in a vault app - taps should just tap.
+========================================================= */
+
+/* no blue flash on ANY element, any browser */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* controls: tappable, not text-selectable. Also drops the 300ms
+   double-tap-zoom delay on old touch browsers. */
+button,
+.tab-item,
+.nav-item,
+.tool-btn,
+.menu-btn,
+.top-icon,
+.row-action,
+.star,
+.more-item,
+.fab-add,
+.lock-sidebar,
+.collection-tile,
+.security-item,
+.profile-tile {
+    -webkit-user-select: none;
+    user-select: none;
+
+    -webkit-touch-callout: none;
+
+    touch-action: manipulation;
+}
+
+/* touch-only helpers: hidden wherever a real mouse is present.
+   Desktop keeps its exact original look. */
+.touch-only {
+    display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+
+    .touch-only {
+        display: block;
+    }
+
+    /* on touch, selected text is branded instead of OS blue */
+    ::selection {
+        background: var(--accent-soft);
+        color: var(--text);
+    }
+}
+
 /* =========================================================
    MICRO-ANIMATIONS
    Subtle, professional motion - never more than ~200ms.
@@ -3379,26 +3416,121 @@ a:focus-visible {
         text-align: center;
     }
 
-    /* hide username + health columns (children 2 and 4 of a row);
-       the labeled action chips stay available */
-    .password-row {
-        grid-template-columns:
-            minmax(170px, 1fr)
-            104px
-            auto;
+    /* Rows are styled by the two range blocks right below (info
+       cards 561-819, compact table 820-1237). The old rules here
+       deleted the health column and half of each row's data -
+       nothing gets hidden on tablets anymore. */
+}
 
-        gap: 10px;
+/* SMALL TABLETS 561-819px: rows become dense info CARDS.
+   Everything the desktop table shows stays visible: account +
+   username, collection, health and every action button.
+   TOUCH DEVICES ONLY (hover:none + coarse pointer): a desktop
+   window at this size keeps the classic desktop layout. */
+@media (min-width: 561px) and (max-width: 819px)
+   and (hover: none) and (pointer: coarse) {
+
+    .sidebar {
+        width: 190px;
     }
 
-    .password-row > :nth-child(2),
-    .password-row > :nth-child(4) {
+    .password-row {
+        grid-template-columns: auto auto;
+
+        justify-content: start;
+        align-items: center;
+
+        gap: 8px 14px;
+
+        padding: 12px 14px;
+    }
+
+    /* the account cell already shows the username underneath the
+       site name - the separate column is a pure duplicate */
+    .password-row > :nth-child(2) {
         display: none;
+    }
+
+    .password-row .account {
+        grid-column: 1 / -1;
+    }
+
+    /* collection + health come back as small labeled chips */
+    .password-row > :nth-child(3),
+    .password-row > :nth-child(4) {
+        display: flex;
+        align-items: center;
+
+        font-size: 11.5px;
+    }
+
+    .password-row .row-actions {
+        grid-column: 1 / -1;
+
+        flex-wrap: wrap;
+        justify-content: flex-start;
     }
 
     .row-action,
     .star {
-        padding: 0 9px;
-        font-size: 10.5px;
+        min-height: 38px;
+    }
+
+    /* touch screens are the norm here */
+    .nav-item,
+    .tool-btn {
+        min-height: 44px;
+    }
+
+    /* a card list has no table header */
+    .table-header {
+        display: none;
+    }
+}
+
+/* TABLETS 820-1237px (TOUCH ONLY): the compact 4-column table.
+   Below ~1238px the desktop 5-column grid (min ~908px) no longer
+   fits - on touch screens we re-pack it. A desktop with a mouse
+   keeps the classic 5-column table at ANY width (the table simply
+   scrolls sideways if the window is very narrow). */
+@media (min-width: 820px) and (max-width: 1237px)
+   and (hover: none) and (pointer: coarse) {
+
+    .password-row {
+        grid-template-columns:
+            minmax(140px, 1.6fr)
+            88px
+            86px
+            minmax(176px, auto);
+
+        gap: 10px;
+    }
+
+    /* duplicate username column (the account cell shows it) */
+    .password-row > :nth-child(2) {
+        display: none;
+    }
+
+    /* ...and its header cell, so the header row matches the body */
+    .table-header > :nth-child(2) {
+        display: none;
+    }
+
+    .row-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    /* comfortable touch targets on tablet screens */
+    .row-action,
+    .star {
+        min-height: 38px;
+        padding: 0 11px;
+    }
+
+    .nav-item,
+    .tool-btn {
+        min-height: 44px;
     }
 }
 
@@ -3425,6 +3557,11 @@ a:focus-visible {
 
 /* Phone: single column cards, keep only account + action chips */
 @media(max-width: 560px) {
+
+    /* card list - the table header is meaningless here */
+    .table-header {
+        display: none;
+    }
 
     .topbar {
         height: 60px;
@@ -3693,7 +3830,10 @@ a:focus-visible {
     }
 
     .sidebar-backdrop {
-        display: block;
+        /* !important: the <=980 tablet block hides the backdrop with
+           !important; a plain "block" here lost that fight, so phones
+           had no dimmed area and no tap-outside-to-close. */
+        display: block !important;
 
         position: fixed;
         inset: 0;
@@ -4150,29 +4290,54 @@ a:focus-visible {
 
 
     </div>
+    <div class="sidebar-section touch-only">
+        <div class="sidebar-label">
+            Account &amp; appearance
+        </div>
+        <!-- The same actions as the phone "More" sheet live here too:
+             a menu should hold everything. closeSidebar() first so the
+             drawer never covers the screen it is acting on. -->
+        <div class="sidebar-tools">
+            <button
+                class="tool-btn"
+                onclick="closeSidebar(); switchProfile()"
+                title="Change profile or sign out"
+            >
+                <span>👤 &nbsp; Switch account
+                    <span class="tool-sub">Profiles &amp; sign out</span>
+                </span>
+            </button>
+            <button
+                class="tool-btn"
+                onclick="closeSidebar(); openThemeDialog()"
+                title="Pick a theme"
+            >
+                <span>🎨 &nbsp; Theme
+                    <span class="tool-sub">5 looks</span>
+                </span>
+            </button>
+            <button
+                class="tool-btn"
+                onclick="closeSidebar(); openPrivacyModal()"
+                title="Hide or show sensitive text"
+            >
+                <span>🛡️ &nbsp; Privacy masking
+                    <span
+                        class="tool-sub"
+                        id="sidePrivacyState"
+                    >Open settings</span>
+                </span>
+            </button>
+        </div>
+    </div>
+
     <!-- /sidebar-scroll -->
 
 
-    <!-- Bottom of sidebar: decorative storage meter + lock button -->
+    <!-- Bottom of sidebar: the lock button (the old fake
+         storage-percentage meter is gone - it was a made-up
+         number, and a password manager must never decorate) -->
     <div class="sidebar-bottom">
-
-        <div class="vault-status">
-
-            <div class="status-line">
-
-                <span>Vault storage</span>
-
-                <!-- decorative placeholder value -->
-                <strong>18%</strong>
-
-            </div>
-
-            <div class="status-bar">
-                <div class="status-fill"></div>
-            </div>
-
-        </div>
-
 
         <!-- Locks the vault: shows the master-password screen -->
         <button
@@ -4204,7 +4369,7 @@ a:focus-visible {
 
         <input
             id="searchInput"
-            placeholder="Search passwords..."
+            placeholder="Search everything..."
             oninput="renderPasswords()"
         >
 
@@ -6499,9 +6664,25 @@ service cloud.firestore {
      they cannot load (e.g. no internet), the app keeps working
      100% locally - every cloud feature checks window.firebase
      first and hides itself when the library is missing. -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- The integrity attribute holds a SHA-384 hash of the EXACT
+     file. If the CDN ever serves different bytes (attack,
+     break-in), the browser refuses to execute it. crossorigin is
+     required for the check to work. -->
+<script
+    src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"
+    integrity="sha384-AQ3POAMqIhwS81FrUH95ekxqBZHeP5tG2JfEL3+7GuTtfRLWnrRh32UxwzM+//A9"
+    crossorigin="anonymous"
+></script>
+<script
+    src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"
+    integrity="sha384-TnlRYaR4JYz/lpaGuaiU61PjNberSA4vjLjtF+oRC/IkohkJqnWxw5EmDSOt1vA1"
+    crossorigin="anonymous"
+></script>
+<script
+    src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"
+    integrity="sha384-qn4Jh88HhJA8dplNQyGjOh9OGI4izVhrfj/qIFgaKcdgOE06pXqIKGlsCILZcLAC"
+    crossorigin="anonymous"
+></script>
 
 <script>
 
@@ -7103,6 +7284,7 @@ let currentTheme = (() => {
 /* Photos of the entry currently open in the Add/Edit modal.
    New picks land here first and are written into the entry on save. */
 let modalPhotos = [];
+let modalPhotoNames = [];   // file name of each staged photo (same order)
 
 /* --- PRIVACY MASKING state --------------------------------------
    privacyEnabled  masking is turned on (code is configured)
@@ -8473,6 +8655,9 @@ function normalizeEntry(entry) {
         photos:     Array.isArray(e.photos)         // attached images
                         ? e.photos.filter(p => typeof p === "string")
                         : [],
+        photoNames: Array.isArray(e.photoNames)      // their file names
+                        ? e.photoNames.filter(n => typeof n === "string")
+                        : [],
         favorite:   Boolean(e.favorite),
         created:    Number(e.created) || Date.now(),
 
@@ -9031,6 +9216,23 @@ function renderCollectionSelect(selectedValue) {
    rebuilds the rows inside #passwordList.
 ========================================================= */
 
+/* True when the entry mentions the search text ANYWHERE: site,
+   username, collection, notes, website url, owner info or the
+   file names of attached photos. Shared by the main list and the
+   trash view so both search exactly the same way. */
+function entryMatchesSearch(entry, search) {
+
+    return [
+        entry.site,
+        entry.username,
+        entry.collection,
+        entry.notes,
+        entry.url,
+        entry.owner,
+        ...(entry.photoNames || [])
+    ].join(" ").toLowerCase().includes(search);
+}
+
 function renderPasswords() {
 
     const container = document.getElementById("passwordList");
@@ -9068,11 +9270,7 @@ function renderPasswords() {
     // --- 2. apply the search text ---------------------------
 
     if (search) {
-        list = list.filter(p =>
-            (p.site + " " + p.username + " " + p.collection + " " + p.notes)
-                .toLowerCase()
-                .includes(search)
-        );
+        list = list.filter(p => entryMatchesSearch(p, search));
     }
 
     // --- 2b. apply the sort dropdown -------------------------
@@ -9841,6 +10039,7 @@ function clearForm() {
     document.getElementById("ownerInput").value      = "";
 
     modalPhotos = [];                 // drop staged photos
+    modalPhotoNames = [];
     renderPhotoStrip();               // repaint empty thumbnail strip
 
     updateStrength();
@@ -9877,6 +10076,7 @@ function editEntry(id) {
 
     // Stage the entry's existing photos for the thumbnail strip.
     modalPhotos = [...entry.photos];
+    modalPhotoNames = [...(entry.photoNames || [])];
     renderPhotoStrip();
 
     // Make sure the entry's collection is selectable, then pick it.
@@ -9940,6 +10140,7 @@ function saveEntry() {
         entry.notes      = notes;
         entry.owner      = owner;
         entry.photos     = [...modalPhotos];   // staged photos
+        entry.photoNames = [...modalPhotoNames];   // their file names
 
         showToast("Entry updated");
     }
@@ -9956,6 +10157,7 @@ function saveEntry() {
             notes,
             owner,
             photos:   [...modalPhotos],
+            photoNames: [...modalPhotoNames],
             favorite: false,
             created:  Date.now(),
             history:  [],           // fills up when the password changes
@@ -10324,7 +10526,25 @@ function renderTrashRows(container) {
         return;
     }
 
-    trash.forEach(entry => {
+    // the trash answers to the same search bar as the main list
+    const trashSearch =
+        document.getElementById("searchInput").value.trim().toLowerCase();
+
+    const trashList = trashSearch
+        ? trash.filter(e => entryMatchesSearch(e, trashSearch))
+        : trash;
+
+    if (!trashList.length) {
+        container.innerHTML = `
+            <div class="empty">
+                <div class="empty-title">No passwords found</div>
+                <div class="empty-text">Try another search.</div>
+            </div>
+        `;
+        return;
+    }
+
+    trashList.forEach(entry => {
 
         const id = Number(entry.id);
         const armed = armedDeleteId === entry.id;
@@ -10614,7 +10834,7 @@ async function handlePhotoFiles(input) {
         try {
             const dataUrl = await readAndCompressImage(file);
 
-            if (dataUrl && addPhotoToModal(dataUrl)) {
+            if (dataUrl && addPhotoToModal(dataUrl, file.name)) {
                 added++;
             }
         } catch (err) {
@@ -10693,7 +10913,7 @@ function shrinkDataUrl(dataUrl) {
 /* Adds one (already compressed) photo to the staged list of the
    currently open Add/Edit form. Returns false when the per-entry
    limit is reached. */
-function addPhotoToModal(dataUrl) {
+function addPhotoToModal(dataUrl, fileName) {
 
     if (modalPhotos.length >= MAX_PHOTOS_PER_ENTRY) {
         showToast("Up to " + MAX_PHOTOS_PER_ENTRY + " photos per entry");
@@ -10701,6 +10921,9 @@ function addPhotoToModal(dataUrl) {
     }
 
     modalPhotos.push(dataUrl);
+
+    // remember the file name so the search bar can find it
+    modalPhotoNames.push(String(fileName || "").trim());
 
     return true;
 }
@@ -10710,6 +10933,8 @@ function addPhotoToModal(dataUrl) {
 function removeModalPhoto(index) {
 
     modalPhotos.splice(index, 1);
+
+    modalPhotoNames.splice(index, 1);   // keep names aligned
 
     renderPhotoStrip();
 }
@@ -11072,6 +11297,10 @@ function openPrivacyModal() {
 /* Action: × / Esc / backdrop of the privacy dialog - closes it
    (the masking state itself is untouched). */
 function closePrivacyModal() {
+
+    // the sidebar drawer may be open behind this dialog - keep its
+    // "Privacy masking" sub-label honest
+    refreshSidePrivacyState();
     document.getElementById("privacyOverlay").classList.remove("show");
 }
 
@@ -13532,6 +13761,19 @@ function sidebarIsDrawer() {
 }
 
 /* Action: "Menu" button - slide the drawer in or out. */
+/* Honest sub-label for the drawer's "Privacy masking" row
+   (same wording as the phone "More" sheet). */
+function refreshSidePrivacyState() {
+
+    const state = document.getElementById("sidePrivacyState");
+
+    if (state) {
+        state.textContent = privacyEnabled
+            ? (privacyUnlocked ? "On - unlocked" : "On - locked")
+            : "Off";
+    }
+}
+
 function toggleSidebar() {
 
     const sidebar = document.getElementById("vaultSidebar");
@@ -13542,6 +13784,8 @@ function toggleSidebar() {
     const open = sidebar.classList.toggle("open");
 
     backdrop.classList.toggle("show", open);
+
+    if (open) refreshSidePrivacyState();
 }
 
 /* Closes the drawer (safe to call in desktop mode too). */
@@ -13836,5 +14080,5 @@ initApp();
 
 </script>
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33d79ee9fdd162e',t:'MTc4ODE5NDQxOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

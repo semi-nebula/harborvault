@@ -25,9 +25,9 @@
      a new tab starts at the landing page.
    - "Switch profile" (topbar) goes back to the picker; "Sign out"
      returns to the landing page. Data is kept, never deleted.
-   - Lock vault (sidebar): manual full-screen lock (plus the
-     Auto-lock timer). A vault whose profile has its OWN master key
-     opens ONLY with that key - the prototype password "demo" can
+   - Leaving a vault (Switch profile / auto-lock) returns to the
+     picker and scrubs decrypted data. A vault whose profile has
+     its OWN master key opens ONLY with that key - "demo" can
      never override a profile key. "demo" works only for vaults
      without a key of their own; the lock-screen hint says which
      case applies. Same rule for privacy "Forgot code?" recovery.
@@ -168,7 +168,7 @@
       Locked/Unlocked badges), per-profile master codes, per-profile
       vault + privacy storage, session per tab, sign out / switch
       profile. The earlier forced lock-on-load screen was removed
-      again on request ("Lock vault" stays, master code accepted).
+      again on request (leaving a vault now returns to the picker).
   13. FIXES + GUEST PROFILES: dialogs (Add profile, guest "?") were
       invisible BEHIND the full-screen pages (z-index) - overlays now
       sit above them (600), lock screen at 650, toasts at 700.
@@ -214,8 +214,8 @@
   26. MOBILE 2.0: phones get real app chrome - a top bar with
       [Menu][view title][More], a BOTTOM TAB BAR (All / Favorites
       / Recent / Security / More), a floating "+ Add" button and a
-      "More" bottom sheet holding Privacy / Theme / Switch profile
-      / Lock vault. Tablets (561-980px) get a permanent slim
+      "More" bottom sheet holding Privacy / Theme / Switch profile.
+      Tablets (561-980px) get a permanent slim
       sidebar again (navigation was unreachable before). Landscape
       phones use a compact single-row top bar; safe-area insets,
       44px+ touch targets and 100dvh heights throughout.
@@ -672,8 +672,7 @@ button {
 
 /* SCROLLABLE MIDDLE of the sidebar: brand + nav + collections +
    autolock settings. Gets its own scrollbar when the content
-   grows (many collections...), while the storage meter and the
-   "Lock vault" button stay pinned at the bottom. */
+   grows (many collections...). */
 .sidebar-scroll {
     flex: 1;
     min-height: 0;      /* required for overflow inside a flex column */
@@ -881,38 +880,6 @@ button {
 
     border-radius: 999px;
     padding: 2px 8px;
-}
-
-/* Sidebar bottom: storage meter + lock button */
-
-.sidebar-bottom {
-    margin-top: auto;
-
-    flex-shrink: 0;     /* always fully visible below the scroll area */
-}
-
-.lock-sidebar {
-    width: 100%;
-
-    border: 1px solid var(--border);
-
-    background: var(--surface);
-
-    border-radius: 10px;
-
-    padding: 10px;
-
-    color: var(--text-secondary);
-
-    font-size: 12px;
-    font-weight: 550;
-
-    transition: .13s;
-}
-
-.lock-sidebar:hover {
-    color: var(--text);
-    border-color: var(--border-strong);
 }
 
 /* =========================================================
@@ -3281,7 +3248,6 @@ button,
 .star,
 .more-item,
 .fab-add,
-.lock-sidebar,
 .collection-tile,
 .security-item,
 .profile-tile {
@@ -3428,7 +3394,8 @@ a:focus-visible {
    TOUCH DEVICES ONLY (hover:none + coarse pointer): a desktop
    window at this size keeps the classic desktop layout. */
 @media (min-width: 561px) and (max-width: 819px)
-   and (hover: none) and (pointer: coarse) {
+   and (hover: none) and (pointer: coarse)
+   and (orientation: landscape) {
 
     .sidebar {
         width: 190px;
@@ -3494,7 +3461,8 @@ a:focus-visible {
    keeps the classic 5-column table at ANY width (the table simply
    scrolls sideways if the window is very narrow). */
 @media (min-width: 820px) and (max-width: 1237px)
-   and (hover: none) and (pointer: coarse) {
+   and (hover: none) and (pointer: coarse)
+   and (orientation: landscape) {
 
     .password-row {
         grid-template-columns:
@@ -3535,7 +3503,7 @@ a:focus-visible {
 }
 
 /* Phone: single column cards, keep only account + action chips */
-@media(max-width: 560px) {
+@media(max-width: 560px), (hover: none) and (pointer: coarse) and (orientation: portrait) {
 
     .profile-grid {
         gap: 16px;
@@ -3556,7 +3524,7 @@ a:focus-visible {
 }
 
 /* Phone: single column cards, keep only account + action chips */
-@media(max-width: 560px) {
+@media(max-width: 560px), (hover: none) and (pointer: coarse) and (orientation: portrait) {
 
     /* card list - the table header is meaningless here */
     .table-header {
@@ -3684,7 +3652,7 @@ a:focus-visible {
     height: 100dvh;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 560px), (hover: none) and (pointer: coarse) and (orientation: portrait) {
 
     /* topbar wraps into two rows: buttons, then full-width search */
     .topbar {
@@ -3801,7 +3769,7 @@ a:focus-visible {
 
 /* ---------- PHONES: drawer + app chrome (final word) ---------- */
 
-@media (max-width: 560px) {
+@media (max-width: 560px), (hover: none) and (pointer: coarse) and (orientation: portrait) {
 
     /* sidebar becomes the slide-in drawer (Menu button) */
     .sidebar {
@@ -4333,21 +4301,6 @@ a:focus-visible {
 
     <!-- /sidebar-scroll -->
 
-
-    <!-- Bottom of sidebar: the lock button (the old fake
-         storage-percentage meter is gone - it was a made-up
-         number, and a password manager must never decorate) -->
-    <div class="sidebar-bottom">
-
-        <!-- Locks the vault: shows the master-password screen -->
-        <button
-            class="lock-sidebar"
-            onclick="lockVault()"
-        >
-            🔒 &nbsp; Lock vault
-        </button>
-
-    </div>
 
 </aside>
 
@@ -5337,11 +5290,10 @@ a:focus-visible {
 
 
 <!-- =====================================================
-     LOCK SCREEN - master password prompt
-     Opened manually with the "Lock vault" button in the sidebar
-     (the app itself starts on the landing page). Accepts the
-     prototype master password "demo" - or the current profile's
-     own master code if it has one. Hidden by unlockVault().
+     LOCK SCREEN - dormant safety curtain. Nothing shows it
+     anymore (leaving a vault returns to the picker); it is kept
+     only so any future code path that reaches for it degrades
+     gracefully. Hidden again by lockVault()/unlockVault().
 ===================================================== -->
 
 <div
@@ -5716,7 +5668,7 @@ a:focus-visible {
 
 <!-- =====================================================
      MORE SHEET (phones) - the topbar actions that no longer fit:
-     privacy masking, theme, switch profile, lock vault.
+     privacy masking, theme, switch profile.
 ===================================================== -->
 
 <div
@@ -5780,14 +5732,6 @@ a:focus-visible {
             >
                 Switch profile
                 <span>Profiles &amp; sign out</span>
-            </button>
-
-            <button
-                class="more-item"
-                onclick="closeMoreMenu(); lockVault();"
-            >
-                Lock vault
-                <span>Cover the screen</span>
             </button>
 
         </div>
@@ -6890,6 +6834,105 @@ async function unwrapDEK(kek, slot) {
         true,
         ["encrypt", "decrypt"]
     );
+}
+
+/* =========================================================
+   FORGIVING MASTER-CODE ENTRY
+   Phone keyboards auto-capitalize the first letter, so a vault
+   whose code is "jjs" must also open for "Jjs" or "JJS". Two
+   candidates are tried, in order: the lowercased typing, then
+   the raw typing. Recovery codes from the printed kit stay
+   exact-match (they are copy-typed, not remembered).
+========================================================= */
+
+/* The two typings that may open a vault, best guess first. */
+function masterCodeVariants(code) {
+    const raw = String(code ?? "");
+    const lower = raw.toLowerCase();
+    return raw === lower ? [raw] : [lower, raw];
+}
+
+/* Salted-hash check across both candidates (the keyring unwrap
+   below is the real cryptographic proof; this is the legacy and
+   pre-check path). */
+function masterHashMatches(salt, masterHash, entered) {
+    return masterCodeVariants(entered)
+        .some(v => hashSecret(salt, v) === masterHash);
+}
+
+/* Unwraps the data key trying both candidates. Returns
+   { dek, normalizedMatch } - normalizedMatch false means the RAW
+   (pre-normalization, mixed-case) code was the one that worked. */
+async function unwrapDEKWithCode(code, slot) {
+
+    let lastError = null;
+
+    const variants = masterCodeVariants(code);
+
+    for (let i = 0; i < variants.length; i++) {
+
+        try {
+
+            const kek = await deriveKEK(variants[i], slot.salt);
+
+            const dek = await unwrapDEK(kek, slot);
+
+            return { dek, normalizedMatch: i === 0 };
+        }
+        catch (err) {
+            lastError = err;       // try the next candidate
+        }
+    }
+
+    throw lastError;
+}
+
+/* One-time upgrade: an older vault just opened with its RAW
+   (mixed-case) code. Re-lock its master slot - and its stored
+   hash - to the lowercased code, so every capitalization works
+   from now on. The recovery slot and the data itself are not
+   touched. Never throws: an upgrade failure must not lock
+   anybody out of an open vault. */
+async function normalizeMasterSlot(email, profileId, dek, rawCode) {
+
+    try {
+
+        const normalized = String(rawCode).toLowerCase();
+
+        const salt = bytesToB64(randomBytes(16));
+
+        const slot =
+            await wrapDEK(await deriveKEK(normalized, salt), dek);
+
+        slot.salt = salt;
+
+        const keyring = loadKeyringRaw(email, profileId);
+
+        if (!keyring) return;
+
+        keyring.master = slot;
+
+        saveKeyring(email, profileId, keyring);
+
+        const accounts = getAccounts();
+
+        const account =
+            accounts.find(a => a.email === email);
+
+        const profile =
+            account && account.profiles.find(p => p.id === profileId);
+
+        if (profile && profile.salt) {
+
+            profile.masterHash =
+                hashSecret(profile.salt, normalized);
+
+            saveAccounts(accounts);
+        }
+    }
+    catch (err) {
+        console.warn("HarborVault: code normalize failed", err);
+    }
 }
 
 /* Encrypts any JS value into an envelope {v, enc, iv, ct}. */
@@ -11241,9 +11284,11 @@ function hashCode(text) {
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
-/* Compares an entered code against the stored hash. */
+/* Compares an entered code against the stored hash. Same
+   forgiveness as master codes: phones auto-capitalize. */
 function privacyCodeMatches(code) {
-    return hashCode(code) === getPrivacyConfig().hash;
+    return masterCodeVariants(code)
+        .some(v => hashCode(v) === getPrivacyConfig().hash);
 }
 
 /* Refreshes the privacy button in the topbar to mirror the current
@@ -11280,9 +11325,40 @@ function openPrivacyModal() {
         privacyUnlocked          ? "unlocked" :
                                     "locked";
 
-    renderPrivacyModal();
-
+    // OPEN FIRST, render second: even if rendering ever fails
+    // (an aggressive shield/extension blocking something), the
+    // dialog still appears instead of silently doing nothing.
     document.getElementById("privacyOverlay").classList.add("show");
+
+    try {
+        renderPrivacyModal();
+    }
+    catch (err) {
+
+        console.error("HarborVault: privacy dialog render failed", err);
+
+        const body =
+            document.getElementById("privacyBody");
+
+        if (body) {
+            body.innerHTML = `
+                <p class="privacy-note">
+                    The privacy dialog could not be drawn normally.
+                    A browser shield or extension may be blocking
+                    part of the page - reload with the shield lowered
+                    for this site, then try again.
+                </p>
+                <div class="privacy-actions">
+                    <button
+                        class="cancel-btn"
+                        onclick="closePrivacyModal()"
+                    >
+                        Close
+                    </button>
+                </div>
+            `;
+        }
+    }
 
     setTimeout(() => {
 
@@ -11545,12 +11621,13 @@ function privacyEnable() {
         return;
     }
 
-    if (code !== confirm) {
+    if (code.toLowerCase() !== confirm.toLowerCase()) {
         showPrivacyError("The two codes do not match.");
         return;
     }
 
-    savePrivacyConfig({ enabled: true, hash: hashCode(code) });
+    // stored without capitals - entry is case forgiving
+    savePrivacyConfig({ enabled: true, hash: hashCode(code.toLowerCase()) });
 
     privacyEnabled  = true;
     privacyUnlocked = false;
@@ -11713,12 +11790,12 @@ function privacyChangeCodeSave() {
         return;
     }
 
-    if (newCode !== confirm) {
+    if (newCode.toLowerCase() !== confirm.toLowerCase()) {
         showPrivacyError("The two new codes do not match.");
         return;
     }
 
-    savePrivacyConfig({ enabled: true, hash: hashCode(newCode) });
+    savePrivacyConfig({ enabled: true, hash: hashCode(newCode.toLowerCase()) });
 
     privacyModalView = "unlocked";
     renderPrivacyModal();
@@ -12031,16 +12108,10 @@ async function initApp() {
             // again. Only keyless, unlocked vaults reopen directly.
             if (profile.locked || session.locked) {
 
-                // PERSISTENT LOCK: refreshing a locked vault brings
-                // back THE VAULT'S OWN LOCK SCREEN (never the
-                // landing page, not even the picker). The session
-                // keeps the profile id; unlockVault() re-opens the
-                // vault with the proven code.
-                vaultProfileId = session.profileId;
-                bootLockedProfileId = session.profileId;
-
-                showScreen("vault");   // behind the curtain
-                lockVault();           // curtain + honest hint
+                // the picker appears and the master code is
+                // required again at the tile
+                showScreen("profiles");
+                renderProfiles();
             }
             else {
                 openVaultAs(session.profileId, true, "").catch(() => {
@@ -12072,11 +12143,9 @@ async function initApp() {
             // the vault's own lock screen comes back on refresh
             if (profile.locked || session.locked) {
 
-                vaultProfileId = session.profileId;
-                bootLockedProfileId = session.profileId;
-
-                showScreen("vault");   // behind the curtain
-                lockVault();
+                // locked vaults reopen only through their tile
+                showScreen("profiles");
+                renderProfiles();
             }
             else {
                 openVaultAs(session.profileId, true, "").catch(() => {
@@ -12654,7 +12723,7 @@ function attemptProfileUnlock() {
     // test is the keyring unwrap inside openVaultAs either way.
     if (!recoveryEntryMode &&
         profile.masterHash &&
-        hashSecret(profile.salt, entered) !== profile.masterHash) {
+        !masterHashMatches(profile.salt, profile.masterHash, entered)) {
 
         const error =
             document.getElementById("profileLockError");
@@ -12816,10 +12885,27 @@ async function openVaultAs(profileId, silent, masterCode, viaRecovery) {
                 ? keyring.recovery
                 : keyring.master;
 
-        const kek = await deriveKEK(code, slot.salt);
-
         try {
-            dek = await unwrapDEK(kek, slot);
+            if (viaRecovery && keyring.recovery) {
+
+                // recovery codes come from a printed kit: EXACT
+                dek = await unwrapDEK(
+                    await deriveKEK(code, slot.salt), slot);
+            }
+            else {
+
+                // master codes are typed on keyboards that
+                // auto-capitalize: case forgiving
+                const attempt = await unwrapDEKWithCode(code, slot);
+
+                dek = attempt.dek;
+
+                // opened with the RAW mixed-case variant -> upgrade
+                // this old vault once, so capitals never matter again
+                if (!attempt.normalizedMatch && profile.locked) {
+                    normalizeMasterSlot(vaultEmail, profileId, dek, code);
+                }
+            }
         } catch (err) {
             // wrong code (GCM authentication failed)
             throw new Error("wrong-code");
@@ -12831,7 +12917,8 @@ async function openVaultAs(profileId, silent, masterCode, viaRecovery) {
 
         firstOpen = true;
 
-        const realCode = profile.locked ? code : "";
+        // normalize: vaults accept any capitalization of the code
+        const realCode = profile.locked ? code.toLowerCase() : "";
 
         keyring = await createKeyring(dek, realCode, null);
 
@@ -12955,6 +13042,15 @@ function updateProfileButton() {
 /* Action: topbar "Switch profile" button - returns to the profile
    picker (works for accounts and guests alike). */
 function switchProfile() {
+
+    /* Leaving a vault SCRUBS the decrypted data from memory -
+       with the tile asking for the master code on re-entry, the
+       switch itself is the lock. (No separate Lock button.) */
+    passwords = [];
+    trash = [];
+    vaultDEK = null;
+
+    bootLockedProfileId = null;
 
     saveSession({
         mode: vaultMode,
@@ -13211,13 +13307,16 @@ async function saveProfileForm() {
                 return;
             }
 
-            if (code !== confirm) {
+            if (code.toLowerCase() !== confirm.toLowerCase()) {
                 showAuthError("profileFormError", "The two codes do not match.");
                 return;
             }
 
             salt = makeSalt();
-            masterHash = hashSecret(salt, code);
+
+            // store the code WITHOUT capitals - entry is case
+            // forgiving, so the stored form must be canonical
+            masterHash = hashSecret(salt, code.toLowerCase());
         }
     }
 
@@ -13281,8 +13380,8 @@ async function saveProfileForm() {
                 // (keyless vaults always used the empty code)
                 const oldCode = beforeLocked ? oldGateCode : "";
 
-                deriveKEK(oldCode, kr.master.salt)
-                    .then(kek => unwrapDEK(kek, kr.master))
+                unwrapDEKWithCode(oldCode, kr.master)
+                    .then(attempt => attempt.dek)
                     .then(dek => {
 
                         let recoveryCode = null;
@@ -13293,7 +13392,7 @@ async function saveProfileForm() {
 
                         return createKeyring(
                             dek,
-                            locked ? (code || oldCode) : "",
+                            locked ? (code || oldCode).toLowerCase() : "",
                             recoveryCode
                         ).then(newKr => {
 
@@ -13332,7 +13431,8 @@ async function saveProfileForm() {
         const recoveryCode = generateRecoveryCode();
 
         generateDEK()
-            .then(dek => createKeyring(dek, code, recoveryCode))
+            .then(dek => createKeyring(
+                dek, code.toLowerCase(), recoveryCode))
             .then(kr => {
                 saveKeyring(vaultEmail, newProfileId, kr);
                 showRecoveryKit(recoveryCode);
@@ -13448,53 +13548,42 @@ async function deleteProfileFromForm() {
    behavior was removed on request); the master code stays.
 ========================================================= */
 
-/* Action: "Lock vault" button in the sidebar - covers the app
-   with the master-password screen and focuses the input. */
+/* Internal: the AUTO-LOCK engine (and a safety net). Leaves the
+   vault, wipes decrypted data from memory and returns to the
+   profile picker - re-entry asks for the master code at the tile. */
 function lockVault() {
 
-    document.getElementById("lockScreen").classList.add("show");
+    /* LOCK = leave the vault. Locking now returns to the PROFILE
+       PICKER (home) - the same mental model as switching profiles.
+       Re-entering asks for the vault's master code at the tile, so
+       the gate is exactly as strong; the difference is that none
+       of the vault stays on screen, and the decrypted data really
+       leaves memory. */
 
-    // Reset the form and any previous error message.
-    document.getElementById("masterInput").value = "";
-    document.getElementById("lockError").style.display = "none";
+    // wipe the DECRYPTED state - a real lock, not a visual one
+    passwords = [];
+    trash = [];
+    vaultDEK = null;
 
-    // Honest hint: say which code actually opens THIS vault.
-    const profile = activeProfile();
+    vaultProfileId = null;
 
-    const needsOwnKey =
-        profile && profile.locked && profile.masterHash;
+    bootLockedProfileId = null;    // picker model - no boot curtain
 
-    document.getElementById("lockHint").textContent = needsOwnKey
-        ? "This vault opens only with this profile's master code."
-        : "Prototype password: demo";
-
-    // Recovery-code entry on the lock screen: only when the vault's
-    // keyring really has a recovery slot (i.e. a kit was printed).
-    const lockKeyring =
-        cryptoReady() && profile && vaultProfileId !== null
-            ? loadKeyringRaw(vaultEmail, vaultProfileId)
-            : null;
-
-    document.getElementById("lockRecoveryBtn").style.display =
-        lockKeyring && lockKeyring.recovery ? "" : "none";
-
-    // always start in master-code mode when the curtain appears
-    setLockRecoveryMode(false);
-
-    clearTimeout(autolockTimer);   // already locked - stop the idle clock
+    clearTimeout(autolockTimer);   // locked - stop the idle clock
 
     // PERSISTENT LOCK: remember the locked state for this tab, so a
-    // page refresh does not drop anyone back into the open vault.
+    // page refresh lands on the picker - never inside the vault.
     const session = loadSession();
 
     if (session) {
         saveSession({ ...session, locked: true });
     }
 
-    setTimeout(
-        () => document.getElementById("masterInput").focus(),
-        50
-    );
+    showScreen("profiles");
+    renderProfiles();
+
+    // any curtain that may somehow still be up comes down
+    document.getElementById("lockScreen").classList.remove("show");
 }
 
 /* Switches the VAULT lock screen between master-code and
@@ -13647,15 +13736,20 @@ async function verifyMasterCode(entered) {
         if (!keyring || !cryptoReady()) {
 
             // no keyring / no WebCrypto -> fall back to the hash
-            return hashSecret(profile.salt, entered)
-                === profile.masterHash;
+            return masterHashMatches(
+                profile.salt, profile.masterHash, entered);
         }
 
         try {
-            const kek =
-                await deriveKEK(entered, keyring.master.salt);
+            const attempt =
+                await unwrapDEKWithCode(entered, keyring.master);
 
-            await unwrapDEK(kek, keyring.master);
+            // opened with the RAW mixed-case variant -> upgrade this
+            // old vault once, so capitals never matter again
+            if (!attempt.normalizedMatch && vaultDEK) {
+                normalizeMasterSlot(
+                    vaultEmail, vaultProfileId, vaultDEK, entered);
+            }
 
             return true;
         } catch (err) {
@@ -13677,7 +13771,7 @@ async function verifyProfileCode(profile, code) {
     if (!profile || !profile.locked) return true;   // keyless
 
     if (profile.masterHash) {
-        return hashSecret(profile.salt, code) === profile.masterHash;
+        return masterHashMatches(profile.salt, profile.masterHash, code);
     }
 
     // cloud-bootstrapped profile: unwrap its keyring
@@ -13688,9 +13782,7 @@ async function verifyProfileCode(profile, code) {
     if (!keyring) return false;
 
     try {
-        const kek = await deriveKEK(code, keyring.master.salt);
-
-        await unwrapDEK(kek, keyring.master);
+        await unwrapDEKWithCode(code, keyring.master);
 
         return true;
     }
@@ -13757,7 +13849,19 @@ function setTheme(id) {
 
 /* True on phone/tablet widths (drawer mode). */
 function sidebarIsDrawer() {
-    return (window.innerWidth || 1024) <= 980;
+
+    // narrow window -> drawer (desktop narrow + phones)
+    if ((window.innerWidth || 1024) <= 980) return true;
+
+    // PORTRAIT tablets of any width use the phone UI - the CSS
+    // media queries do the same, JS must not disagree with them
+    try {
+        return window.matchMedia(
+            "(hover: none) and (pointer: coarse) and (orientation: portrait)"
+        ).matches;
+    } catch (err) {
+        return false;               // ancient browser - width only
+    }
 }
 
 /* Action: "Menu" button - slide the drawer in or out. */
@@ -14031,6 +14135,23 @@ document
         if (event.target === this) closeCloudDialog();
     });
 
+// LAST-CHANCE DIAGNOSTIC: if anything ever throws inside a click
+// handler (shields, extensions...), say so ONCE instead of failing
+// in silence. The console keeps the full error for debugging.
+let hvErrorToastShown = false;
+
+window.addEventListener("error", event => {
+
+    console.error("HarborVault:", event.error || event.message);
+
+    if (!hvErrorToastShown) {
+        hvErrorToastShown = true;
+        try {
+            showToast("Something did not run - reload the page if buttons stop working");
+        } catch (err) { /* never throw from here */ }
+    }
+});
+
 // theme picker: backdrop click closes it
 document
     .getElementById("themeOverlay")
@@ -14080,5 +14201,5 @@ initApp();
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33d79ee9fdd162e',t:'MTc4ODE5NDQxOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f441018743aab',t:'MTc4ODIxMzE4NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

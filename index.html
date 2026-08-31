@@ -4763,12 +4763,12 @@ a:focus-visible {
             <div class="field">
 
                 <label for="usernameInput">
-                    Username / email
+                    Username
                 </label>
 
                 <input
                     id="usernameInput"
-                    placeholder="you@example.com"
+                    placeholder="e.g. skumar"
                 >
 
             </div>
@@ -4787,6 +4787,22 @@ a:focus-visible {
                 ></select>
 
             </div>
+
+        </div>
+
+
+        <!-- Field: the login EMAIL (optional - separate from the
+             username, because many logins use both) -->
+        <div class="field">
+
+            <label for="emailInput">
+                Email
+            </label>
+
+            <input
+                id="emailInput"
+                placeholder="you@example.com"
+            >
 
         </div>
 
@@ -4908,6 +4924,53 @@ a:focus-visible {
             <div
                 class="photo-strip"
                 id="photoStrip"
+            ></div>
+
+        </div>
+
+
+        <!-- Field: attached FILES (any type). Encrypted + synced
+             with the vault; 1 MB per file, 4 per entry. -->
+        <div class="field">
+
+            <div
+                style="
+                    display:flex;
+                    align-items:center;
+                    gap:10px;
+                "
+            >
+                <!-- clicking this label opens the file picker -->
+                <label
+                    class="add-photo-btn"
+                    for="fileInput"
+                >
+                    📎 &nbsp;Attach files
+                </label>
+
+                <span
+                    class="photo-count"
+                    id="fileCount"
+                >
+                    0 / 4
+                </span>
+
+                <!-- hidden multi-file picker; handleFiles() reads
+                     each file and stages it for saving -->
+                <input
+                    id="fileInput"
+                    type="file"
+                    multiple
+                    style="display:none"
+                    onchange="handleFiles(this)"
+                >
+
+            </div>
+
+            <!-- chosen files appear here as removable rows -->
+            <div
+                class="photo-strip"
+                id="fileStrip"
             ></div>
 
         </div>
@@ -5130,6 +5193,17 @@ a:focus-visible {
 
         </div>
 
+        <!-- Attached files (download + remember). Hidden when the
+             entry has none - see openDetail. -->
+        <div
+            class="field"
+            id="detailFilesField"
+        >
+            <label>
+                Attached files
+            </label>
+            <div id="detailFiles"></div>
+        </div>
         <!-- Read-only username + copy button (hidden for
              photo-only entries - see openDetail) -->
         <div
@@ -5171,6 +5245,38 @@ a:focus-visible {
         </div>
 
 
+        <!-- Read-only email + copy button (only when the entry
+             has an email of its own) -->
+        <div
+            class="field"
+            id="detailEmailField"
+        >
+            <label for="detailEmail">
+                Email
+            </label>
+            <div
+                style="
+                    display:flex;
+                    gap:6px;
+                "
+            >
+                <input
+                    id="detailEmail"
+                    readonly
+                >
+                <button
+                    class="row-action"
+                    onclick="copyDetail('email')"
+                    title="Copy email"
+                    style="
+                        height:37px;
+                        flex-shrink:0;
+                    "
+                >
+                    Copy
+                </button>
+            </div>
+        </div>
         <!-- Read-only (masked) password + show/hide + copy buttons
              (hidden for photo-only entries - see openDetail) -->
         <div
@@ -6682,6 +6788,12 @@ const MASTER_PASSWORD = "demo";        // prototype-only master password
 const MAX_PHOTOS_PER_ENTRY = 4;
 const PHOTO_MAX_SIZE = 400;
 
+/* Attached FILES (any type - pdf, txt, keys...). Stored encrypted
+   with the vault like everything else. Honest limits: 1 MB per
+   file, 4 per entry (browser storage is ~5 MB in total). */
+const MAX_FILES_PER_ENTRY = 4;
+const FILE_MAX_BYTES = 1024 * 1024;
+
 /* Privacy masking: after a successful unlock everything is fully
    visible for this long, then it re-locks automatically. */
 const PRIVACY_AUTOLOCK_MS = 2 * 60 * 1000; // 2 minutes
@@ -7328,6 +7440,7 @@ let currentTheme = (() => {
    New picks land here first and are written into the entry on save. */
 let modalPhotos = [];
 let modalPhotoNames = [];   // file name of each staged photo (same order)
+let modalFiles = [];        // staged attachments {name,type,size,data}
 
 /* --- PRIVACY MASKING state --------------------------------------
    privacyEnabled  masking is turned on (code is configured)
@@ -7938,7 +8051,7 @@ async function syncPushProfile(profileId, opts) {
     // device, with a message, instead of failing silently.
     if (JSON.stringify(row).length > 900000) {
         showToast(
-            "This vault is too big for the free cloud (photos?) - " +
+            "This vault is too big for the free cloud (photos/files?) - " +
             "it stays on this device only"
         );
 
@@ -8690,6 +8803,7 @@ function normalizeEntry(entry) {
         id:         Number(e.id) || Date.now(),
         site:       String(e.site ?? "").trim() || "Unknown",
         username:   String(e.username ?? ""),
+        email:      String(e.email ?? ""),      // separate login email
         password:   String(e.password ?? ""),
         collection: String(e.collection ?? "").trim() || "Personal",
         url:        String(e.url ?? ""),
@@ -8700,6 +8814,18 @@ function normalizeEntry(entry) {
                         : [],
         photoNames: Array.isArray(e.photoNames)      // their file names
                         ? e.photoNames.filter(n => typeof n === "string")
+                        : [],
+        files:      Array.isArray(e.files)           // attached files
+                        ? e.files
+                              .filter(f => f && typeof f.name === "string"
+                                          && typeof f.data === "string")
+                              .slice(0, MAX_FILES_PER_ENTRY)
+                              .map(f => ({
+                                  name: String(f.name),
+                                  type: String(f.type || ""),
+                                  size: Number(f.size) || 0,
+                                  data: String(f.data)
+                              }))
                         : [],
         favorite:   Boolean(e.favorite),
         created:    Number(e.created) || Date.now(),
@@ -9268,11 +9394,13 @@ function entryMatchesSearch(entry, search) {
     return [
         entry.site,
         entry.username,
+        entry.email,
         entry.collection,
         entry.notes,
         entry.url,
         entry.owner,
-        ...(entry.photoNames || [])
+        ...(entry.photoNames || []),
+        ...(entry.files || []).map(f => f.name),
     ].join(" ").toLowerCase().includes(search);
 }
 
@@ -9374,7 +9502,14 @@ function renderPasswords() {
         // PRIVACY: while masking is locked, usernames are shown
         // partially hidden (sk•••@•••.com) instead of in full.
         const hidden = sensitiveHidden();
-        const shownUsername = hidden ? maskUsername(entry.username) : entry.username;
+
+        // identifier for the row: the username, or the email when
+        // the entry has no username
+        const identifier = entry.username || entry.email;
+
+        const shownUsername = hidden
+            ? maskUsername(identifier)
+            : identifier;
 
         // Entry avatar: first attached photo, or the site initials.
         const avatar = entry.photos.length
@@ -10083,6 +10218,8 @@ function clearForm() {
 
     modalPhotos = [];                 // drop staged photos
     modalPhotoNames = [];
+    modalFiles = [];                  // drop staged file attachments
+    renderFileStrip();
     renderPhotoStrip();               // repaint empty thumbnail strip
 
     updateStrength();
@@ -10112,6 +10249,7 @@ function editEntry(id) {
 
     document.getElementById("siteInput").value       = entry.site;
     document.getElementById("usernameInput").value   = entry.username;
+    document.getElementById("emailInput").value      = entry.email || "";
     document.getElementById("passwordInput").value   = entry.password;
     document.getElementById("urlInput").value        = entry.url || "";
     document.getElementById("notesInput").value      = entry.notes || "";
@@ -10120,7 +10258,9 @@ function editEntry(id) {
     // Stage the entry's existing photos for the thumbnail strip.
     modalPhotos = [...entry.photos];
     modalPhotoNames = [...(entry.photoNames || [])];
+    modalFiles = [...(entry.files || [])];
     renderPhotoStrip();
+    renderFileStrip();
 
     // Make sure the entry's collection is selectable, then pick it.
     renderCollectionSelect(entry.collection);
@@ -10142,6 +10282,7 @@ function saveEntry() {
     const url        = document.getElementById("urlInput").value.trim();
     const notes      = document.getElementById("notesInput").value.trim();
     const owner      = document.getElementById("ownerInput").value.trim();
+    const email      = document.getElementById("emailInput").value.trim();
 
     // --- validation -------------------------------------------
     // Only the NAME is required. Username, password and URL are
@@ -10177,6 +10318,7 @@ function saveEntry() {
 
         entry.site       = site;
         entry.username   = username;
+        entry.email      = email;
         entry.password   = password;
         entry.collection = collection;
         entry.url        = url;
@@ -10184,6 +10326,7 @@ function saveEntry() {
         entry.owner      = owner;
         entry.photos     = [...modalPhotos];   // staged photos
         entry.photoNames = [...modalPhotoNames];   // their file names
+        entry.files     = [...modalFiles];         // attached files
 
         showToast("Entry updated");
     }
@@ -10194,6 +10337,7 @@ function saveEntry() {
             id:       Date.now(),   // unique id from the current time
             site,
             username,
+            email,
             password,
             collection,
             url,
@@ -10201,6 +10345,7 @@ function saveEntry() {
             owner,
             photos:   [...modalPhotos],
             photoNames: [...modalPhotoNames],
+            files:     [...modalFiles],
             favorite: false,
             created:  Date.now(),
             history:  [],           // fills up when the password changes
@@ -10249,6 +10394,9 @@ function openDetail(id) {
         "Added " + new Date(entry.created).toLocaleDateString()
         + (entry.photos.length
             ? ` · ${entry.photos.length} photo${entry.photos.length > 1 ? "s" : ""}`
+            : "")
+        + ((entry.files || []).length
+            ? ` · ${entry.files.length} file${entry.files.length > 1 ? "s" : ""}`
             : "");
 
     // Account holder / info (hide the field when the entry has none).
@@ -10280,6 +10428,14 @@ function openDetail(id) {
         : "";
     usernameInput.className = hidden && entry.username ? "masked-input" : "";
 
+    // Email row: only when this entry actually has one.
+    const emailInput = document.getElementById("detailEmail");
+    document.getElementById("detailEmailField").style.display =
+        entry.email ? "" : "none";
+    emailInput.value = entry.email
+        ? (hidden ? maskUsername(entry.email) : entry.email)
+        : "";
+    emailInput.className = hidden && entry.email ? "masked-input" : "";
     document.getElementById("detailPasswordField").style.display =
         entry.password ? "" : "none";
 
@@ -10313,6 +10469,33 @@ function openDetail(id) {
 
     document.getElementById("detailPhotosField").style.display =
         entry.photos.length ? "" : "none";
+    // Attached files: one row per file with a Download button.
+    const filesBox = document.getElementById("detailFiles");
+    filesBox.innerHTML = "";
+    (entry.files || []).forEach(file => {
+        const row = document.createElement("div");
+        row.style.cssText =
+            "display:flex;align-items:center;gap:8px;" +
+            "padding:8px 0;border-top:1px solid var(--border);" +
+            "font-size:12.5px;min-width:0;";
+        const name = document.createElement("span");
+        name.style.cssText =
+            "flex:1;min-width:0;overflow:hidden;" +
+            "text-overflow:ellipsis;white-space:nowrap;";
+        name.textContent =
+            "📄 " + file.name + "  (" + formatFileSize(file.size) + ")";
+        name.title = file.name;
+        const dl = document.createElement("button");
+        dl.className = "row-action";
+        dl.textContent = "Download";
+        dl.title = "Download a copy";
+        dl.onclick = () => downloadFile(file.data, file.name);
+        row.appendChild(name);
+        row.appendChild(dl);
+        filesBox.appendChild(row);
+    });
+    document.getElementById("detailFilesField").style.display =
+        (entry.files || []).length ? "" : "none";
 
     // Always start with the password field masked (••••) and the
     // show/hide button back on "Show".
@@ -10378,13 +10561,16 @@ function copyDetail(type) {
     if (!entry) return;
 
     const value =
-        type === "username" ? entry.username : entry.password;
-
+        type === "username" ? entry.username
+        : type === "email"    ? entry.email
+        : entry.password;
     copyText(value).then(ok => {
         showToast(
             !ok
                 ? "Copy failed - select and copy manually"
-                : type === "username" ? "Username copied" : "Password copied"
+                : type === "username" ? "Username copied"
+                : type === "email"    ? "Email copied"
+                : "Password copied"
         );
     });
 }
@@ -10983,6 +11169,157 @@ function removeModalPhoto(index) {
 }
 
 /* Repaints the thumbnail strip + "n / 4" counter in the modal. */
+/* Stages one attached file. Honest limits, honest messages. */
+function addFileToModal(name, type, size, dataUrl) {
+
+    if (modalFiles.length >= MAX_FILES_PER_ENTRY) {
+        showToast("Up to " + MAX_FILES_PER_ENTRY + " files per entry");
+        return false;
+    }
+
+    if (size > FILE_MAX_BYTES) {
+        showToast(
+            name + " is too big - files up to 1 MB each"
+        );
+        return false;
+    }
+
+    modalFiles.push({
+        name: String(name || "file"),
+        type: String(type || ""),
+        size: Number(size) || 0,
+        data: String(dataUrl || "")
+    });
+
+    renderFileStrip();
+
+    return true;
+}
+
+/* Action: x on a staged file row - nothing is saved until
+   "Save password". */
+function removeModalFile(index) {
+
+    modalFiles.splice(index, 1);
+
+    renderFileStrip();
+}
+
+/* Draws the staged-file rows (name + size + download + remove). */
+function renderFileStrip() {
+
+    const strip =
+        document.getElementById("fileStrip");
+
+    const count =
+        document.getElementById("fileCount");
+
+    if (count) {
+        count.textContent =
+            modalFiles.length + " / " + MAX_FILES_PER_ENTRY;
+    }
+
+    strip.innerHTML = "";
+
+    modalFiles.forEach((file, index) => {
+
+        const row = document.createElement("div");
+        row.style.cssText =
+            "display:flex;align-items:center;gap:8px;" +
+            "padding:8px 0;border-top:1px solid var(--border);" +
+            "font-size:12.5px;min-width:0;";
+
+        const name = document.createElement("span");
+        name.style.cssText =
+            "flex:1;min-width:0;overflow:hidden;" +
+            "text-overflow:ellipsis;white-space:nowrap;";
+        name.textContent =
+            "📄 " + file.name +
+            "  (" + formatFileSize(file.size) + ")";
+        name.title = file.name;
+
+        const dl = document.createElement("button");
+        dl.className = "row-action";
+        dl.textContent = "Download";
+        dl.title = "Download a copy";
+        dl.onclick = () => downloadFile(file.data, file.name);
+
+        const remove = document.createElement("button");
+        remove.className = "row-action danger";
+        remove.textContent = "×";
+        remove.title = "Remove file";
+        remove.onclick = () => removeModalFile(index);
+
+        row.appendChild(name);
+        row.appendChild(dl);
+        row.appendChild(remove);
+
+        strip.appendChild(row);
+    });
+}
+
+/* Reads a picked file into a data URL (Promise). */
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+}
+
+/* Action: the hidden file picker - stages every chosen file. */
+async function handleFiles(input) {
+
+    const files = [...(input.files || [])];
+
+    input.value = "";      // allow picking the same file again
+
+    if (!files.length) return;
+
+    let added = 0;
+
+    for (const file of files) {
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+
+            if (dataUrl && addFileToModal(
+                    file.name, file.type, file.size, dataUrl)) {
+                added++;
+            }
+        }
+        catch (err) {
+            console.warn("HarborVault: could not read file", err);
+        }
+    }
+
+    showToast(
+        added
+            ? added + " file" + (added > 1 ? "s" : "") + " attached"
+            : "No files attached (limit: 1 MB each, " +
+              MAX_FILES_PER_ENTRY + " per entry)"
+    );
+}
+
+/* Sends a stored file back to the user's disk. */
+function downloadFile(dataUrl, name) {
+
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = name || "file";
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+/* Human-readable byte size for file rows. */
+function formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+    return bytes + " B";
+}
+
 function renderPhotoStrip() {
 
     const strip =
@@ -14201,5 +14538,5 @@ initApp();
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f441018743aab',t:'MTc4ODIxMzE4NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f71386d7ddf6e',t:'MTc4ODIxNTAzMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

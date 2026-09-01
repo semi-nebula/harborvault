@@ -7579,12 +7579,20 @@ function initCloud() {
             cloudAuth = window.firebase.auth();
             cloudDb = window.firebase.firestore();
 
+            // EXPLICIT: the sign-in SURVIVES browser restarts
+            // (LOCAL = localStorage). It is the default, but say
+            // it out loud so nobody "optimizes" it away.
+            try {
+                cloudAuth.setPersistence(
+                    window.firebase.auth.Auth.Persistence.LOCAL);
+            } catch (err) { /* old builds - default is LOCAL anyway */ }
+
             // keep the signed-in state fresh across tabs
             cloudAuth.onAuthStateChanged(user => {
+                cloudAuthKnown = true;
                 cloudAuthOk = user
                     ? { user: { id: user.uid, email: user.email } }
                     : null;
-
                 updateSyncPill();
             });
         }
@@ -7982,6 +7990,11 @@ let cloudProfileIds = null;
 /* True while the live listener is attached (for the pill). */
 let cloudLiveSubscribed = false;
 let cloudUnsub = null;         // Firestore onSnapshot unsubscribe
+
+/* True once Firebase has actually REPORTED an auth state (a real
+   user, or a real null). Until then "no session" is a guess -
+   usually a slow network - and must not log anybody out. */
+let cloudAuthKnown = false;
 
 /* Uploads one profile (name, lock flag + all ciphertext). With
    bump:true (normal saves) the version increases first - that is
@@ -8642,10 +8655,10 @@ async function cloudRestoreSession() {
 
             const unsub = cloudAuth.onAuthStateChanged(user => {
 
+                cloudAuthKnown = true;
                 cloudAuthOk = user
                     ? { user: { id: user.uid, email: user.email } }
                     : null;
-
                 if (!settled) { settled = true; resolve(); }
             });
 
@@ -12323,22 +12336,35 @@ function loadSession() {
         // sessionStorage is the per-tab source of truth...
         let raw = safeSession.get(SESSION_KEY);
 
-        // ...but when it was lost (preview frames, restored tabs)
-        // fall back to the localStorage mirror so a refresh never
-        // dumps a signed-in user back onto the landing page.
-        if (!raw) raw = safeStorage.get(LAST_SESSION_KEY);
+        // ...but when it was lost (new tab, browser restart,
+        // preview frames) fall back to the localStorage mirror so
+        // a fresh open never dumps a signed-in user onto the
+        // landing page. COLD-START FLAG: the caller must not
+        // auto-open a vault from a mirror restore.
+        if (raw) return JSON.parse(raw);
 
-        return JSON.parse(raw || "null");
+        const mirror = safeStorage.get(LAST_SESSION_KEY);
+
+        if (!mirror) return null;
+
+        const restored = JSON.parse(mirror);
+
+        return restored ? { ...restored, fromMirror: true } : null;
     } catch (err) {
         return null;
     }
 }
 
 function saveSession(session) {
-    safeSession.set(SESSION_KEY, JSON.stringify(session));
+
+    // the fromMirror flag is internal - it never goes to storage
+    const clean = { ...session };
+    delete clean.fromMirror;
+
+    safeSession.set(SESSION_KEY, JSON.stringify(clean));
 
     // keep the localStorage mirror in sync (see LAST_SESSION_KEY)
-    safeStorage.set(LAST_SESSION_KEY, JSON.stringify(session));
+    safeStorage.set(LAST_SESSION_KEY, JSON.stringify(clean));
 }
 
 function clearSession() {
@@ -12392,15 +12418,48 @@ async function initApp() {
 
     let session = loadSession();
 
+    // COLD-START HYGIENE: a session that came back from the
+    // localStorage MIRROR (new tab / browser restart) never
+    // auto-opens a vault - the picker appears and the master code
+    // is asked at the tile, exactly like a manual profile switch.
+    if (session && session.fromMirror && session.profileId !== null) {
+        session = { mode: session.mode, email: session.email, profileId: null };
+        saveSession(session);
+    }
+
     if (cloudAvailable() && !cloudSession) {
 
-        // not signed in -> landing page (but guests stay guests)
-        if (!session || session.mode === "account") {
-            clearSession();
+        if (!session) {
+            // nothing to restore anywhere -> honest landing page
             showScreen("landing");
             showLandingChoice();
             updateSyncPill();
             return;
+        }
+
+        // The cloud session did not come back. An account user
+        // with vaults on THIS DEVICE stays in the app (the picker)
+        // - a cloud hiccup must never lock anybody out of their
+        // own device. Vault entry stays master-code gated.
+        if (session.mode === "account") {
+
+            const accountStillHere =
+                getAccounts().some(a => a.email === session.email);
+
+            if (!accountStillHere) {
+                // local data really is gone -> honest landing page
+                clearSession();
+                showScreen("landing");
+                showLandingChoice();
+                updateSyncPill();
+                return;
+            }
+
+            showToast(
+                cloudAuthKnown
+                    ? "Signed out of the cloud - vaults on this device stay open; sign in again to sync"
+                    : "Cloud not reached yet - vaults on this device stay open"
+            );
         }
     }
 
@@ -14538,5 +14597,5 @@ initApp();
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f71386d7ddf6e',t:'MTc4ODIxNTAzMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
